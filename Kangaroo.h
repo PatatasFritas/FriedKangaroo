@@ -111,7 +111,7 @@ public:
 
   Kangaroo(Secp256K1 *secp,int32_t initDPSize,bool useGpu,std::string &workFile,std::string &iWorkFile,
            uint32_t savePeriod,bool saveKangaroo,double maxStep,int wtimeout,int sport,int ntimeout,
-           std::string serverIp,std::string outputFile,bool splitWorkfile);
+           std::string serverIp,std::string outputFile,bool splitWorkfile,std::string prvFile);
   void Run(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize);
   void RunServer();
   bool ParseConfigFile(std::string &fileName);
@@ -142,6 +142,7 @@ private:
   bool SendToServer(std::vector<ITEM> &dp);
   bool CheckKey(Int d1,Int d2,uint8_t type);
   bool CollisionCheck(Int *dist,uint32_t kType);
+  bool savePrivkey(Int *pk);
   void ComputeExpected(double dp,double *op,double *ram);
   void InitRange();
   void InitSearchKey();
@@ -229,6 +230,7 @@ private:
 
   // Backup stuff
   std::string outputFile;
+  std::string prvFile;
   FILE *fRead;
   uint64_t offsetCount;
   double offsetTime;

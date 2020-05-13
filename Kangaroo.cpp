@@ -34,7 +34,7 @@ using namespace std;
 // ----------------------------------------------------------------------------
 
 Kangaroo::Kangaroo(Secp256K1 *secp,int32_t initDPSize,bool useGpu,string &workFile,string &iWorkFile,uint32_t savePeriod,bool saveKangaroo,
-                   double maxStep,int wtimeout,int port,int ntimeout,string serverIp,string outputFile,bool splitWorkfile) {
+                   double maxStep,int wtimeout,int port,int ntimeout,string serverIp,string outputFile,bool splitWorkfile,string prvFile) {
 
   this->secp = secp;
   this->initDPSize = initDPSize;
@@ -53,6 +53,7 @@ Kangaroo::Kangaroo(Secp256K1 *secp,int32_t initDPSize,bool useGpu,string &workFi
   this->ntimeout = ntimeout;
   this->serverIp = serverIp;
   this->outputFile = outputFile;
+  this->prvFile = prvFile;
   this->hostInfo = NULL;
   this->clientMode = serverIp.length()>0;
   this->endOfSearch = false;
@@ -62,7 +63,6 @@ Kangaroo::Kangaroo(Secp256K1 *secp,int32_t initDPSize,bool useGpu,string &workFi
   this->collisionInSameHerd = 0;
   this->keyIdx = 0;
   this->splitWorkfile = splitWorkfile;
-
 
   CPU_GRP_SIZE = 1024;
 
@@ -197,6 +197,7 @@ bool Kangaroo::Output(Int *pk,char sInfo,int sType) {
   ::fprintf(f,"Key#%2d [%d%c]Pub:  0x%s \n",keyIdx,sType,sInfo,secp->GetPublicKeyHex(true,keysToSearch[keyIdx]).c_str());
   if(PR.equals(keysToSearch[keyIdx])) {
     ::fprintf(f,"       Priv: 0x%s \n",pk->GetBase16().c_str());
+    savePrivkey(pk);
   } else {
     ::fprintf(f,"       Failed !\n");
     if(needToClose)
@@ -251,6 +252,26 @@ bool  Kangaroo::CheckKey(Int d1,Int d2,uint8_t type) {
 
 }
 
+// ----------------------------------------------------------------------------
+
+bool Kangaroo::savePrivkey(Int *pk) {
+
+  if(prvFile.length()==0)
+    return false;
+
+  FILE *f = fopen(prvFile.c_str(),"a");
+  if(f == NULL) {
+    ::printf("prvFile: Cannot open %s for writing\n",workFile.c_str());
+    ::printf("%s\n",::strerror(errno));
+    return false;
+  }
+
+  ::fprintf(f,"%016lx%016lx%016lx%016lx\n", pk->bits64[3], pk->bits64[2], pk->bits64[1], pk->bits64[0]);
+  fclose(f);
+
+  return true;
+
+}
 
 // ----------------------------------------------------------------------------
 
