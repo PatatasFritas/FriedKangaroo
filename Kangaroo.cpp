@@ -63,6 +63,7 @@ Kangaroo::Kangaroo(Secp256K1 *secp,int32_t initDPSize,bool useGpu,string &workFi
   this->keyIdx = 0;
   this->splitWorkfile = splitWorkfile;
 
+
   CPU_GRP_SIZE = 1024;
 
   // Init mutex
@@ -122,7 +123,7 @@ bool Kangaroo::ParseConfigFile(std::string &fileName) {
   rangeStart.SetBase16((char *)lines[0].c_str());
   rangeEnd.SetBase16((char *)lines[1].c_str());
   for(int i=2;i<(int)lines.size();i++) {
-    
+
     Point p;
     bool isCompressed;
     if( !secp->ParsePublicKeyHex(lines[i],p,isCompressed) ) {
@@ -133,9 +134,9 @@ bool Kangaroo::ParseConfigFile(std::string &fileName) {
 
   }
 
-  ::printf("Start:%s\n",rangeStart.GetBase16().c_str());
-  ::printf("Stop :%s\n",rangeEnd.GetBase16().c_str());
-  ::printf("Keys :%d\n",(int)keysToSearch.size());
+  ::printf("\033[1;35m[Start]\033[0m %s\n", rangeStart.GetBase16().c_str());
+  ::printf("\033[1;35m[Stop]\033[0m  %s\n", rangeEnd.GetBase16().c_str());
+  ::printf("\033[1;35m[Keys]\033[0m  %d\n", (int)keysToSearch.size());
 
   return true;
 
@@ -162,9 +163,9 @@ void Kangaroo::SetDP(int size) {
   }
 
 #ifdef WIN64
-  ::printf("DP size: %d [0x%016I64X]\n",dpSize,dMask);
+  ::printf("\033[1;31m[DP size]\033[0m %d [0x%016I64X]\n",dpSize,dMask);
 #else
-  ::printf("DP size: %d [0x%" PRIx64 "]\n",dpSize,dMask);
+  ::printf("\033[1;31m[DP size]\033[0m %d [0x%" PRIx64 "]\n",dpSize,dMask);
 #endif
 
 }
@@ -228,11 +229,11 @@ bool  Kangaroo::CheckKey(Int d1,Int d2,uint8_t type) {
   Point P = secp->ComputePublicKey(&pk);
 
   if(P.equals(keyToSearch)) {
-    // Key solved    
+    // Key solved
 #ifdef USE_SYMMETRY
     pk.ModAddK1order(&rangeWidthDiv2);
 #endif
-    pk.ModAddK1order(&rangeStart);    
+    pk.ModAddK1order(&rangeStart);
     return Output(&pk,'N',type);
   }
 
@@ -249,6 +250,10 @@ bool  Kangaroo::CheckKey(Int d1,Int d2,uint8_t type) {
   return false;
 
 }
+
+
+// ----------------------------------------------------------------------------
+
 
 bool Kangaroo::CollisionCheck(Int *dist,uint32_t kType) {
 
@@ -366,7 +371,7 @@ void Kangaroo::SolveKeyCPU(TH_PARAM *ph) {
   }
 
   if(keyIdx==0)
-    ::printf("SolveKeyCPU Thread %d: %d kangaroos\n",ph->threadId,CPU_GRP_SIZE);
+    ::printf("\033[1;31m[SolveKeyCPU Thread %d]\033[0m %d kangaroos\n",ph->threadId,CPU_GRP_SIZE);
 
   ph->hasStarted = true;
 
@@ -528,14 +533,14 @@ void Kangaroo::SolveKeyGPU(TH_PARAM *ph) {
   gpu = new GPUEngine(ph->gridSizeX,ph->gridSizeY,ph->gpuId,65536 * 2);
 
   if(keyIdx == 0)
-    ::printf("GPU: %s (%.1f MB used)\n",gpu->deviceName.c_str(),gpu->GetMemory() / 1048576.0);
+    ::printf("\033[1;33m[GPU]\033[0m %s (%.1f MB used)\n",gpu->deviceName.c_str(),gpu->GetMemory() / 1048576.0);
 
   double t0 = Timer::get_tick();
 
 
   if( ph->px==NULL ) {
     if(keyIdx == 0)
-      ::printf("SolveKeyGPU Thread GPU#%d: creating kangaroos...\n",ph->gpuId);
+      ::printf("\033[1;33m[SolveKeyGPU Thread GPU#%d]\033[0m creating kangaroos...\n",ph->gpuId);
     // Create Kangaroos, if not already loaded
     uint64_t nbThread = gpu->GetNbThread();
     ph->px = new Int[ph->nbKangaroo];
@@ -755,7 +760,7 @@ void Kangaroo::CreateJumpTable() {
   double minAvg = pow(2.0,(double)jumpBit - 1.05);
   //::printf("Jump Avg distance min: 2^%.2f\n",log2(minAvg));
   //::printf("Jump Avg distance max: 2^%.2f\n",log2(maxAvg));
-  
+
   // Kangaroo jumps
   // Constant seed for compatibilty of workfiles
   rseed(0x600DCAFE);
@@ -824,7 +829,7 @@ void Kangaroo::CreateJumpTable() {
     jumpPointy[i].Set(&J.y);
   }
 
-  ::printf("Jump Avg distance: 2^%.2f\n",log2(distAvg));
+  ::printf("\033[1;34m[Jump Avg distance]\033[0m 2^%.2f\n",log2(distAvg));
 
   unsigned long seed = Timer::getSeed32();
   rseed(seed);
@@ -944,7 +949,7 @@ void Kangaroo::Run(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize
 
   memset(params, 0,totalThread * sizeof(TH_PARAM));
   memset(counters, 0, sizeof(counters));
-  ::printf("Number of CPU thread: %d\n", nbCPUThread);
+  ::printf("\033[1;33m[CPU threads]\033[0m %d\n", nbCPUThread);
 
 #ifdef WITHGPU
 
@@ -980,7 +985,7 @@ void Kangaroo::Run(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize
   CreateJumpTable();
 
 
-  ::printf("Number of kangaroos: 2^%.2f\n",log2((double)totalRW));
+  ::printf("\033[1;32m[Number of kangaroos]\033[0m 2^%.2f\n",log2((double)totalRW));
 
   if( !clientMode ) {
 
@@ -997,10 +1002,9 @@ void Kangaroo::Run(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize
       initDPSize = suggestedDP;
 
     ComputeExpected((double)initDPSize,&expectedNbOp,&expectedMem);
-    if(nbLoadedWalk == 0) ::printf("Suggested DP: %d\n",suggestedDP);
-    ::printf("Expected operations: 2^%.2f\n",log2(expectedNbOp));
-    ::printf("Expected RAM: %.1fMB\n",expectedMem);
-
+    if(nbLoadedWalk == 0) ::printf("\033[1;32m[Suggested DP]\033[0m %d\n",suggestedDP);
+    ::printf("\033[1;32m[Expected operations]\033[0m 2^%.2f\n",log2(expectedNbOp));
+    ::printf("\033[1;32m[Expected RAM]\033[0m %.1fMB\n",expectedMem);
   }
 
   SetDP(initDPSize);
@@ -1064,7 +1068,7 @@ void Kangaroo::Run(int nbThread,std::vector<int> gpuId,std::vector<int> gridSize
       double SN = pow(2.0,rangePower / 2.0);
       double avg = (double)totalCount / (double)(keyIdx + 1);
       ::printf("\n[%3d] 2^%.3f Dead:%d Avg:2^%.3f DeadAvg:%.1f (%.3f %.3f sqrt(N))\n",
-                              keyIdx, log2((double)count), collisionInSameHerd, 
+                              keyIdx, log2((double)count), collisionInSameHerd,
                               log2(avg), (double)totalDead / (double)(keyIdx + 1),
                               avg/SN,expectedNbOp/SN);
     }

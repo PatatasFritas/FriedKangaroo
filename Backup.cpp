@@ -130,9 +130,9 @@ bool Kangaroo::LoadWork(string &fileName) {
 
     keysToSearch.push_back(key);
 
-    ::printf("Start:%s\n",rangeStart.GetBase16().c_str());
-    ::printf("Stop :%s\n",rangeEnd.GetBase16().c_str());
-    ::printf("Keys :%d\n",(int)keysToSearch.size());
+    ::printf("\033[1;35m[Start]\033[0m %s\n", rangeStart.GetBase16().c_str());
+    ::printf("\033[1;35m[Stop]\033[0m  %s\n", rangeEnd.GetBase16().c_str());
+    ::printf("\033[1;35m[Keys]\033[0m  %d\n", (int)keysToSearch.size());
 
     // Read hashTable
     hashTable.LoadTable(fRead);
