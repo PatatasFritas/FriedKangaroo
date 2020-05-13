@@ -303,7 +303,7 @@ void Kangaroo::Process(TH_PARAM *params,std::string unit) {
     // Display stats
     if(isAlive(params) && !endOfSearch) {
       if(clientMode) {
-        printf("\r[%.2f %s][GPU %.2f %s][Count 2^%.2f][%s][Server %6s]  ",
+        printf("\33[2K\r\033[1;32m[%.2f %s] \033[1;33m[GPU %.2f %s] \033[1;35m[Count 2^%.2f] \033[1;36m[%s] \033[1;31m[Server %6s]\033[0m",
           avgKeyRate / 1000000.0,unit.c_str(),
           avgGpuKeyRate / 1000000.0,unit.c_str(),
           log2((double)count + offsetCount),
@@ -311,7 +311,7 @@ void Kangaroo::Process(TH_PARAM *params,std::string unit) {
           serverStatus.c_str()
           );
       } else {
-        printf("\r[%.2f %s][GPU %.2f %s][Count 2^%.2f][Dead %d][%s (Avg %s)][%s]  ",
+        printf("\33[2K\r\033[1;32m[%.2f %s] \033[1;33m[GPU %.2f %s] \033[1;35m[Count 2^%.2f] \033[1;36m[Dead %d] \033[1;31m[%s (Avg %s)] \033[1;32m[%s]\033[0m",
           avgKeyRate / 1000000.0,unit.c_str(),
           avgGpuKeyRate / 1000000.0,unit.c_str(),
           log2((double)count + offsetCount),
@@ -350,9 +350,9 @@ void Kangaroo::Process(TH_PARAM *params,std::string unit) {
 
   count = getCPUCount() + getGPUCount();
   t1 = Timer::get_tick();
-  
+
   if( !endOfSearch ) {
-    printf("\r[%.2f %s][GPU %.2f %s][Cnt 2^%.2f][%s]  ",
+    printf("\33[2K\r[%.2f %s][GPU %.2f %s][Cnt 2^%.2f][%s]  ",
       avgKeyRate / 1000000.0,unit.c_str(),
       avgGpuKeyRate / 1000000.0,unit.c_str(),
       log2((double)count),
