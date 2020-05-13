@@ -43,6 +43,7 @@ void printUsage() {
   printf(" -t nbThread: Specify number of thread\n");
   printf(" -w workfile: Specify file to save work into (current processed key only)\n");
   printf(" -i workfile: Specify file to load work from (current processed key only)\n");
+  printf(" -op prvfile: Specify file to save private key in hex format\n");
   printf(" -wi workInterval: Periodic interval (in seconds) for saving work\n");
   printf(" -ws: Save kangaroos in the work file\n");
   printf(" -wsplit: Split work file of server and reset hashtable\n");
@@ -156,6 +157,7 @@ static bool serverMode = false;
 static string serverIP = "";
 static string outputFile = "";
 static bool splitWorkFile = false;
+static string prvFile = "";
 
 int main(int argc, char* argv[]) {
 
@@ -220,6 +222,10 @@ int main(int argc, char* argv[]) {
     } else if(strcmp(argv[a],"-o") == 0) {
       CHECKARG("-o");
       outputFile = string(argv[a]);
+      a++;
+    } else if(strcmp(argv[a],"-op") == 0) {
+      a++;
+      prvFile = string(argv[a]);
       a++;
     } else if(strcmp(argv[a],"-wi") == 0) {
       CHECKARG("-wi");
@@ -291,7 +297,7 @@ int main(int argc, char* argv[]) {
   }
 
   Kangaroo *v = new Kangaroo(secp,dp,gpuEnable,workFile,iWorkFile,savePeriod,saveKangaroo,
-                             maxStep,wtimeout,port,ntimeout,serverIP,outputFile,splitWorkFile);
+                             maxStep,wtimeout,port,ntimeout,serverIP,outputFile,splitWorkFile,prvFile);
   if(checkFlag) {
     v->Check(gpuId,gridSize);  
     exit(0);
