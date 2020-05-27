@@ -455,3 +455,117 @@ void Kangaroo::WorkInfo(std::string &fileName) {
   fclose(f1);
 
 }
+
+
+void Kangaroo::WorkExport(std::string &fileName) {
+
+  ::printf("Loading: %s\n",fileName.c_str());
+
+  uint32_t version;
+  FILE *f1 = ReadHeader(fileName,&version);
+  if(f1 == NULL)
+    return;
+
+  uint32_t dp1;
+  Point k1;
+  uint64_t count1;
+  double time1;
+  Int RS1;
+  Int RE1;
+
+  uint32_t items, maxItems;
+  uint64_t numTame = 0;
+  uint64_t numWild = 0;
+  int128_t x,d;
+  bool htype, sign;
+
+  FILE *ft = fopen("tame.txt","a");
+  if(ft == NULL) {
+    ::printf("prvFile: Cannot open tame.txt for writing\n");
+    ::printf("%s\n",::strerror(errno));
+    return;
+  }
+
+  FILE *fw = fopen("wild.txt","a");
+  if(fw == NULL) {
+    ::printf("prvFile: Cannot open wild.txt for writing\n");
+    ::printf("%s\n",::strerror(errno));
+    return;
+  }
+
+  // Read global param
+  ::fread(&dp1,sizeof(uint32_t),1,f1);
+  ::fread(&RS1.bits64,32,1,f1); RS1.bits64[4] = 0;
+  ::fread(&RE1.bits64,32,1,f1); RE1.bits64[4] = 0;
+  ::fread(&k1.x.bits64,32,1,f1); k1.x.bits64[4] = 0;
+  ::fread(&k1.y.bits64,32,1,f1); k1.y.bits64[4] = 0;
+  ::fread(&count1,sizeof(uint64_t),1,f1);
+  ::fread(&time1,sizeof(double),1,f1);
+
+  k1.z.SetInt32(1);
+  if(!secp->EC(k1)) {
+    ::printf("MergeWork: key1 does not lie on elliptic curve\n");
+    fclose(f1);
+    return;
+  }
+
+  // Read DP
+  for(uint32_t h = 0; h < HASH_SIZE; h++) {
+
+    fread(&items,sizeof(uint32_t),1,f1);
+    fread(&maxItems,sizeof(uint32_t),1,f1);
+
+    for(uint32_t i = 0; i < items; i++) {
+      fread(&x,16,1,f1);
+      fread(&d,16,1,f1);
+      sign = (d.i64[1] & 0x8000000000000000);
+      htype = (d.i64[1] & 0x4000000000000000);
+
+      if(htype==0) {
+          ::fprintf(ft,"%05x%016lx%016lx ", h & 0x3ffff, (uint64_t) (x.i64[1]), (uint64_t) (x.i64[0]));
+          ::fprintf(ft,"%016lx%016lx\n", (uint64_t) (d.i64[1] & 0x3fffffffffffffff), (uint64_t) (d.i64[0]));
+          numTame++;
+      } else {
+          ::fprintf(fw,"%05x%016lx%016lx ", h & 0x3ffff, (uint64_t) (x.i64[1]), (uint64_t) (x.i64[0]));
+          if(sign)
+            ::fprintf(fw,"-");
+          ::fprintf(fw,"%016lx%016lx\n", (uint64_t) (d.i64[1] & 0x3fffffffffffffff), (uint64_t) (d.i64[0]));
+          numWild++;
+      }
+    }
+  }
+
+  ::printf("Version   : %d\n",version);
+  ::printf("DP bits   : %d\n",dp1);
+  ::printf("Start     : %s\n",RS1.GetBase16().c_str());
+  ::printf("Stop      : %s\n",RE1.GetBase16().c_str());
+  ::printf("Key       : %s\n",secp->GetPublicKeyHex(true,k1).c_str());
+#ifdef WIN64
+  ::printf("Count     : %I64d 2^%.3f\n",count1,log2(count1));
+#else
+  ::printf("Count     : %" PRId64 " 2^%.3f\n",count1,log2(count1));
+#endif
+  ::printf("Time      : %s\n",GetTimeStr(time1).c_str());
+
+#ifdef WIN64
+  ::printf("DP Count  : %I64d 2^%.3f\n",numTame + numWild,log2((double)numTame + numWild));
+  ::printf("DP Tame   : %I64d 2^%.3f\n",numTame,log2((double)numTame));
+  ::printf("DP Wild   : %I64d 2^%.3f\n",numWild,log2((double)numWild));
+#else
+  ::printf("DP Count  : %" PRId64 " 2^%.3f\n",numTame + numWild,log2(numTame + numWild));
+  ::printf("DP Tame   : %" PRId64 " 2^%.3f\n",numTame,log2(numTame));
+  ::printf("DP Wild   : %" PRId64 " 2^%.3f\n",numWild,log2(numWild));
+#endif
+
+  fread(&nbLoadedWalk,sizeof(uint64_t),1,f1);
+#ifdef WIN64
+  ::printf("Kangaroos : %I64d 2^%.3f\n",nbLoadedWalk,log2(nbLoadedWalk));
+#else
+  ::printf("Kangaroos : %" PRId64 " 2^%.3f\n",nbLoadedWalk,log2(nbLoadedWalk));
+#endif
+
+  fclose(f1);
+  fclose(ft);
+  fclose(fw);
+}
+

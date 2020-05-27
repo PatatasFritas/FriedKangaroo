@@ -50,6 +50,7 @@ void printUsage() {
   printf(" -wm file1 file2 destfile: Merge work file\n");
   printf(" -wt timeout: Save work timeout in millisec (default is 3000ms)\n");
   printf(" -winfo file1: Work file info file\n");
+  printf(" -wexport file1: Export Work file\n");
   printf(" -m maxStep: number of operations before give up the search (maxStep*expected operation)\n");
   printf(" -s: Start in server mode\n");
   printf(" -c server_ip: Start in client mode and connect to server server_ip\n");
@@ -149,6 +150,7 @@ static string merge1 = "";
 static string merge2 = "";
 static string mergeDest = "";
 static string infoFile = "";
+static string exportFile = "";
 static double maxStep = 0.0;
 static int wtimeout = 3000;
 static int ntimeout = 3000;
@@ -218,6 +220,10 @@ int main(int argc, char* argv[]) {
     } else if(strcmp(argv[a],"-winfo") == 0) {
       CHECKARG("-winfo");
       infoFile = string(argv[a]);
+      a++;
+    } else if(strcmp(argv[a],"-wexport") == 0) {
+      a++;
+      exportFile = string(argv[a]);
       a++;
     } else if(strcmp(argv[a],"-o") == 0) {
       CHECKARG("-o");
@@ -304,6 +310,9 @@ int main(int argc, char* argv[]) {
   } else {
     if(infoFile.length()>0) {
       v->WorkInfo(infoFile);
+      exit(0);
+    } else if(exportFile.length()>0) {
+      v->WorkExport(exportFile);
       exit(0);
     } else if(merge1.length()>0) {
       v->MergeWork(merge1,merge2,mergeDest);
