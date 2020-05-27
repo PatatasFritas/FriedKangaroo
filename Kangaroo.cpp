@@ -198,6 +198,8 @@ bool Kangaroo::Output(Int *pk,char sInfo,int sType) {
   if(PR.equals(keysToSearch[keyIdx])) {
     ::fprintf(f,"       Priv: 0x%s \n",pk->GetBase16().c_str());
     savePrivkey(pk);
+    if(workFile.length() > 0)
+        SaveServerWork();
   } else {
     ::fprintf(f,"       Failed !\n");
     if(needToClose)
