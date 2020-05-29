@@ -46,6 +46,7 @@ void printUsage() {
   printf(" -ws: Save kangaroos in the work file\n");
   printf(" -wsplit: Split work file of server and reset hashtable\n");
   printf(" -wm file1 file2 destfile: Merge work file\n");
+  printf(" -wmdir dir destfile: Merge directory of work files\n");
   printf(" -wt timeout: Save work timeout in millisec (default is 3000ms)\n");
   printf(" -winfo file1: Work file info file\n");
   printf(" -wexport file1: Export Work file\n");
@@ -147,6 +148,7 @@ static bool saveKangaroo = false;
 static string merge1 = "";
 static string merge2 = "";
 static string mergeDest = "";
+static string dirname = "";
 static string infoFile = "";
 static string exportFile = "";
 static double maxStep = 0.0;
@@ -212,6 +214,12 @@ int main(int argc, char* argv[]) {
       merge1 = string(argv[a]);
       a++;
       merge2 = string(argv[a]);
+      a++;
+      mergeDest = string(argv[a]);
+      a++;
+    }  else if(strcmp(argv[a],"-wmdir") == 0) {
+      a++;
+      dirname = string(argv[a]);
       a++;
       mergeDest = string(argv[a]);
       a++;
@@ -315,6 +323,9 @@ int main(int argc, char* argv[]) {
       exit(0);
     } else if(merge1.length()>0) {
       v->MergeWork(merge1,merge2,mergeDest);
+      exit(0);
+    } else if(dirname.length()>0) {
+      v->MergeDir(dirname,mergeDest);
       exit(0);
     } if(iWorkFile.length()>0) {
       if( !v->LoadWork(iWorkFile) )

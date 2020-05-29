@@ -23,6 +23,7 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <algorithm>
+#include <dirent.h>
 #ifndef WIN64
 #include <pthread.h>
 #endif
@@ -297,3 +298,194 @@ void Kangaroo::MergeWork(std::string& file1,std::string& file2,std::string& dest
 
 }
 
+
+void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
+
+  uint32_t numMerged = 0;
+  bool firstFile = true;
+  uint32_t loadedItems = 0;
+  double t0;
+  double t1;
+  uint32_t v, v1;
+  std::string file;
+
+  uint32_t dp;
+  Point k;
+  uint64_t totalcount;
+  double totaltime;
+  Int RS;
+  Int RE;
+
+  uint32_t dp1;
+  Point k1;
+  uint64_t count1;
+  double time1;
+  Int RS1;
+  Int RE1;
+
+  HashTable* h2 = new HashTable();
+  collisionInSameHerd = 0;
+  endOfSearch = false;
+
+  int nbCore = Timer::getCoreNumber();
+  int l2 = (int)log2(nbCore);
+  int nbThread = (int)pow(2.0,l2);
+  int stride = HASH_SIZE / nbThread;
+
+  TH_PARAM* params = (TH_PARAM*)malloc(nbThread * sizeof(TH_PARAM));
+  THREAD_HANDLE* thHandles = (THREAD_HANDLE*)malloc(nbThread * sizeof(THREAD_HANDLE));
+
+  // ---------------------------------------------------
+
+  ::printf("Loading directory: %s\n",dirname.c_str());
+
+
+  DIR *dir;
+  struct dirent *ent;
+  if ((dir = opendir(dirname.c_str())) != NULL) {
+    while ((ent = readdir(dir)) != NULL) {
+      if ( ent->d_type != 0x8) continue;
+      file = dirname + "/" + ent->d_name;
+
+      ::printf("\nLoading file: %s\n",file.c_str());
+
+      t0 = Timer::get_tick();
+
+      FILE* f = ReadHeader(file,&v1);
+      if(f == NULL) {
+        ::printf("MergeWork: Error opening %s\n",file.c_str());
+        continue;
+      }
+
+      // Read global param
+      ::fread(&dp1,sizeof(uint32_t),1,f);
+      ::fread(&RS1.bits64,32,1,f); RS1.bits64[4] = 0;
+      ::fread(&RE1.bits64,32,1,f); RE1.bits64[4] = 0;
+      ::fread(&k1.x.bits64,32,1,f); k1.x.bits64[4] = 0;
+      ::fread(&k1.y.bits64,32,1,f); k1.y.bits64[4] = 0;
+      k1.z.SetInt32(1);
+      ::fread(&count1,sizeof(uint64_t),1,f);
+      ::fread(&time1,sizeof(double),1,f);
+
+      if(firstFile) {
+          dp = dp1;
+          v = v1;
+          RS = RS1;
+          RE = RE1;
+          k = k1;
+          totaltime = time1;
+          totalcount = count1;
+      }
+
+      if(!firstFile && v1 != v) {
+        ::printf("MergeWork %s: cannot merge workfile of different version\n",file.c_str());
+        fclose(f);
+        continue;
+      }
+
+      k1.z.SetInt32(1);
+      if(!secp->EC(k1)) {
+        ::printf("MergeWork %s: key1 does not lie on elliptic curve\n",file.c_str());
+        fclose(f);
+        continue;
+      }
+
+      if(!firstFile && (!RS.IsEqual(&RS1) || !RE.IsEqual(&RE1))) {
+        ::printf("MergeWork: File range differs\n");
+        ::printf("RS: %s\n",RS.GetBase16().c_str());
+        ::printf("RE: %s\n",RE.GetBase16().c_str());
+        ::printf("RS1: %s\n",RS1.GetBase16().c_str());
+        ::printf("RE1: %s\n",RE1.GetBase16().c_str());
+        fclose(f);
+        continue;
+      }
+
+      if(!firstFile && !k.equals(k1)) {
+        ::printf("MergeWork %s: key differs, multiple keys not yet supported\n",file.c_str());
+        fclose(f);
+        continue;
+      }
+
+      t1 = Timer::get_tick();
+      if(firstFile) {
+        // Read hashTable
+        hashTable.LoadTable(f);
+        ::printf("[HashTable1 %s] [%s]\n",hashTable.GetSizeInfo().c_str(),GetTimeStr(t1 - t0).c_str());
+      } else {
+        // Read hashTable
+        h2->LoadTable(f);
+        ::printf("[HashTable1 %s]\n",hashTable.GetSizeInfo().c_str());
+        ::printf("[HashTable2 %s] [%s]\n",h2->GetSizeInfo().c_str(),GetTimeStr(t1 - t0).c_str());
+      }
+
+      fclose(f);
+
+      if(firstFile) {
+        firstFile = false;
+        numMerged++;
+        continue;
+      }
+
+      // ---------------------------------------------------
+
+      // Set starting parameters
+      keysToSearch.clear();
+      keysToSearch.push_back(k1);
+      keyIdx = 0;
+      rangeStart.Set(&RS1);
+      rangeEnd.Set(&RE1);
+      InitRange();
+      InitSearchKey();
+
+      t0 = Timer::get_tick();
+
+      ::printf("Thread: %d\n",nbThread);
+      ::printf("Merging");
+
+      memset(params,0,nbThread * sizeof(TH_PARAM));
+
+      for(int i = 0; i < nbThread; i++) {
+        params[i].threadId = i;
+        params[i].isRunning = true;
+        params[i].h2 = h2;
+        params[i].hStart = i * stride;
+        params[i].hStop = (i + 1) * stride;
+        thHandles[i] = LaunchThread(_mergeThread,params + i);
+      }
+      JoinThreads(thHandles,nbThread);
+      FreeHandles(thHandles,nbThread);
+
+      t1 = Timer::get_tick();
+
+      if(!endOfSearch) {
+          ::printf("\33[2K\rDone [%.3fs]\n",(t1 - t0));
+          dpSize = (dp < dp1) ? dp : dp1;
+      } else {
+          break;
+      }
+
+      totaltime += time1;
+      totalcount += count1;
+
+      ::printf("Dead kangaroo: %d\n",collisionInSameHerd);
+      ::printf("Total: count 2^%.2f [%s]\n",log2((double)totalcount),GetTimeStr(totaltime).c_str());
+      numMerged++;
+
+      memset(h2->E,0,sizeof(h2->E)); // Reset tmp HashTable
+      h2->Reset();
+
+    }
+    closedir(dir);
+
+    if(numMerged>1 && !endOfSearch) {
+      // Write the new work file
+      workFile = dest;
+      SaveWork(totalcount, totaltime, NULL, 0);
+    }
+
+  } else {
+    perror ("");
+    return;
+  }
+
+}
