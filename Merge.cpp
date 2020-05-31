@@ -24,6 +24,7 @@
 #include <math.h>
 #include <algorithm>
 #include <dirent.h>
+#include <sys/stat.h>
 #ifndef WIN64
 #include <pthread.h>
 #endif
@@ -298,6 +299,12 @@ void Kangaroo::MergeWork(std::string& file1,std::string& file2,std::string& dest
 
 }
 
+typedef struct File {
+    std::string name;
+    std::string fullpath;
+    uint64_t size;
+} File;
+bool sortBySize(const File &lhs, const File &rhs) { return lhs.size > rhs.size; }
 
 void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
 
@@ -341,19 +348,31 @@ void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
 
 
   DIR *dir;
+  std::vector<File> files;
+  File fileobj;
   struct dirent *ent;
   if ((dir = opendir(dirname.c_str())) != NULL) {
     while ((ent = readdir(dir)) != NULL) {
       if ( ent->d_type != 0x8) continue;
-      file = dirname + "/" + ent->d_name;
+      fileobj.name = ent->d_name;
+      fileobj.fullpath = dirname + "/" + ent->d_name;
 
-      ::printf("\nLoading file: %s\n",file.c_str());
+      struct stat stat_buf;
+      int rc = stat(fileobj.fullpath.c_str(), &stat_buf);
+      fileobj.size = rc == 0 ? stat_buf.st_size : 0;
+      files.push_back(fileobj);
+
+    }
+    std::sort(files.begin(), files.end(), sortBySize);
+
+    for(int nFile = 0; nFile < files.size(); nFile++) {
+      ::printf("\nLoading file: %s (%dMB)\n",files[nFile].name.c_str(),files[nFile].size/1024/1024);
 
       t0 = Timer::get_tick();
 
-      FILE* f = ReadHeader(file,&v1);
+      FILE* f = ReadHeader(files[nFile].fullpath,&v1);
       if(f == NULL) {
-        ::printf("MergeWork: Error opening %s\n",file.c_str());
+        ::printf("MergeWork: Error opening %s\n",files[nFile].name.c_str());
         continue;
       }
 
