@@ -243,37 +243,49 @@ void Kangaroo::MergeWork(std::string& file1,std::string& file2,std::string& dest
   }
 
 
-  // Divide by 64 the amount of needed RAM
-  int block = HASH_SIZE / 64;
+  uint32_t nbItem;
+  uint32_t maxItem;
 
-  for(int s=0;s<HASH_SIZE && !endOfSearch;s += block) {
+  // Load hashtable
+  hashTable.LoadTable(f1,0,HASH_SIZE);
 
-    ::printf(".");
+  for(uint32_t h = 0; h < HASH_SIZE && !endOfSearch; h++) {
 
-    uint32_t S = s;
-    uint32_t E = s + block;
+    fread(&nbItem,sizeof(uint32_t),1,f2);
+    fread(&maxItem,sizeof(uint32_t),1,f2);
 
-    // Load hashtables
-    hashTable.LoadTable(f1,S,E);
-    h2->LoadTable(f2,S,E);
+    for(uint32_t i = 0; i < nbItem; i++) {
+      ENTRY* e = (ENTRY*)malloc(sizeof(ENTRY));
+      fread(&(e->x),16,1,f2);
+      fread(&(e->d),16,1,f2);
 
-    int stride = block/nbThread;
+      int addStatus = hashTable.Add(h,e);
+      switch(addStatus) {
 
-    for(int i = 0; i < nbThread; i++) {
-      params[i].threadId = i;
-      params[i].isRunning = true;
-      params[i].h2 = h2;
-      params[i].hStart = S + i * stride;
-      params[i].hStop  = S + (i + 1) * stride;
-      thHandles[i] = LaunchThread(_mergeThread,params + i);
+      case ADD_OK:
+        break;
+
+      case ADD_DUPLICATE:
+        free(e);
+        collisionInSameHerd++;
+        break;
+
+      case ADD_COLLISION:
+        Int dist;
+        dist.SetInt32(0);
+        uint32_t kType = (e->d.i64[1] & 0x4000000000000000ULL) != 0;
+        int sign = (e->d.i64[1] & 0x8000000000000000ULL) != 0;
+        dist.bits64[0] = e->d.i64[0];
+        dist.bits64[1] = e->d.i64[1];
+        dist.bits64[1] &= 0x3FFFFFFFFFFFFFFFULL;
+        if(sign) dist.ModNegK1order();
+        CollisionCheck(&dist,kType);
+        break;
+      }
     }
-    JoinThreads(thHandles,nbThread);
-    FreeHandles(thHandles,nbThread);
-
-    hashTable.SaveTable(f,S,E,false);
-    hashTable.Reset();
-
   }
+  hashTable.SaveTable(f,0,HASH_SIZE,false);
+  hashTable.Reset();
 
   fclose(f1);
   fclose(f2);
@@ -330,7 +342,6 @@ void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
   Int RS1;
   Int RE1;
 
-  HashTable* h2 = new HashTable();
   collisionInSameHerd = 0;
   endOfSearch = false;
 
@@ -430,22 +441,18 @@ void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
         // Read hashTable
         hashTable.LoadTable(f);
         ::printf("[HashTable1 %s] [%s]\n",hashTable.GetSizeInfo().c_str(),GetTimeStr(t1 - t0).c_str());
-      } else {
-        // Read hashTable
-        h2->LoadTable(f);
-        ::printf("[HashTable1 %s]\n",hashTable.GetSizeInfo().c_str());
-        ::printf("[HashTable2 %s] [%s]\n",h2->GetSizeInfo().c_str(),GetTimeStr(t1 - t0).c_str());
-      }
 
-      fclose(f);
+        fclose(f);
 
-      if(firstFile) {
         firstFile = false;
         numMerged++;
         continue;
       }
 
       // ---------------------------------------------------
+
+      // Read hashTable
+      ::printf("[HashTable1 %s]\n",hashTable.GetSizeInfo().c_str());
 
       // Set starting parameters
       keysToSearch.clear();
@@ -458,21 +465,45 @@ void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
 
       t0 = Timer::get_tick();
 
-      ::printf("Thread: %d\n",nbThread);
-      ::printf("Merging");
+      uint32_t   nbItem;
+      uint32_t   maxItem;
+      for(uint32_t h = 0; h < HASH_SIZE && !endOfSearch; h++) {
+        fread(&nbItem,sizeof(uint32_t),1,f);
+        fread(&maxItem,sizeof(uint32_t),1,f);
 
-      memset(params,0,nbThread * sizeof(TH_PARAM));
+        for(uint32_t i = 0; i < nbItem; i++) {
+          ENTRY* e = (ENTRY*)malloc(sizeof(ENTRY));
+          fread(&(e->x),16,1,f);
+          fread(&(e->d),16,1,f);
 
-      for(int i = 0; i < nbThread; i++) {
-        params[i].threadId = i;
-        params[i].isRunning = true;
-        params[i].h2 = h2;
-        params[i].hStart = i * stride;
-        params[i].hStop = (i + 1) * stride;
-        thHandles[i] = LaunchThread(_mergeThread,params + i);
+          int addStatus = hashTable.Add(h,e);
+          switch(addStatus) {
+
+          case ADD_OK:
+            break;
+
+          case ADD_DUPLICATE:
+            free(e);
+            collisionInSameHerd++;
+            break;
+
+          case ADD_COLLISION:
+            Int dist;
+            dist.SetInt32(0);
+            uint32_t kType = (e->d.i64[1] & 0x4000000000000000ULL) != 0;
+            int sign = (e->d.i64[1] & 0x8000000000000000ULL) != 0;
+            dist.bits64[0] = e->d.i64[0];
+            dist.bits64[1] = e->d.i64[1];
+            dist.bits64[1] &= 0x3FFFFFFFFFFFFFFFULL;
+            if(sign) dist.ModNegK1order();
+            CollisionCheck(&dist,kType);
+            break;
+
+          }
+        }
+        nbItem = 0;
+        maxItem = 0;
       }
-      JoinThreads(thHandles,nbThread);
-      FreeHandles(thHandles,nbThread);
 
       t1 = Timer::get_tick();
 
@@ -489,9 +520,6 @@ void Kangaroo::MergeDir(std::string& dirname,std::string& dest) {
       ::printf("Dead kangaroo: %d\n",collisionInSameHerd);
       ::printf("Total: count 2^%.2f [%s]\n",log2((double)totalcount),GetTimeStr(totaltime).c_str());
       numMerged++;
-
-      memset(h2->E,0,sizeof(h2->E)); // Reset tmp HashTable
-      h2->Reset();
 
     }
     closedir(dir);
