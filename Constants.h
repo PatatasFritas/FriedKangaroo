@@ -19,7 +19,7 @@
 #define CONSTANTSH
 
 // Release number
-#define RELEASE "1.9(unstalbe)"
+#define RELEASE "1.11gamma"
 
 // Use symmetry
 //#define USE_SYMMETRY
@@ -43,5 +43,8 @@
 
 // Timeout before closing connection idle client in sec
 #define CLIENT_TIMEOUT 3600.0
+
+// Number of merge partition
+#define MERGE_PART 256
 
 #endif //CONSTANTSH

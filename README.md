@@ -5,7 +5,7 @@ Discusion thread: https://bitcointalk.org/index.php?topic=5244940.0
 
 Usage:
 ```
-Kangaroo v1.7
+Kangaroo v1.9
 Kangaroo [-v] [-t nbThread] [-d dpBit] [gpu] [-check]
          [-gpuId gpuId1[,gpuId2,...]] [-g g1x,g1y[,g2x,g2y,...]]
          inFile
@@ -21,6 +21,7 @@ Kangaroo [-v] [-t nbThread] [-d dpBit] [gpu] [-check]
  -ws: Save kangaroos in the work file
  -wsplit: Split work file of server and reset hashtable
  -wm file1 file2 destfile: Merge work file
+ -wmdir dir destfile: Merge directory of work files
  -wt timeout: Save work timeout in millisec (default is 3000ms)
  -winfo file1: Work file info file
  -m maxStep: number of operations before give up the search (maxStep*expected operation)
@@ -57,17 +58,17 @@ ex
 
 # Note on Time/Memory tradeoff of the DP method
 
-The distinguished point (DP) method is an efficent method for storing random walks and detect collision between them. Instead of storing all points of all kanagroo's random walks, we store only points that have an x value starting with dp zero bits. When 2 kangaroos collide, they will then follow the same path because their jumps are a function of their x values. The collsion will be then detected until the 2 kangaroos reach a distinguished point.\
-This has a drawback when you have a lot of kangaroos and looking for collision in a small range as the overhead is in the order of nbKangaroo.2<sup>dp</sup> until a collision is detected. If dp is too small a large number of point will enter in the central table, will decrease performance and quickly fill the RAM.
+The distinguished point (DP) method is an efficient method for storing random walks and detect collision between them. Instead of storing all points of all kangagroo's random walks, we store only points that have an x value starting with dpBit zero bits. When 2 kangaroos collide, they will then follow the same path because their jumps are a function of their x values. The collision will be then detected when the 2 kangaroos reach a distinguished point.\
+This has a drawback when you have a lot of kangaroos and looking for collision in a small range as the overhead is in the order of nbKangaroo.2<sup>dpBit</sup> until a collision is detected. If dpBit is too small a large number of point will enter in the central table, will decrease performance and quickly fill the RAM.
 **Powerfull GPUs with large number of cores won't be very efficient on small range, you can try to decrease the grid size in order to have less kangaroos but the GPU performance may not be optimal.**
-Yau can change manualy the dp size using the -d option, take in considration that it will require about nbKangaroo.2<sup>dp</sup> more operations to complete.
+Yau can change manualy the DP mask size using the -d option, take in consideration that it will require about nbKangaroo.2<sup>dpBit</sup> more operations to complete.
 
 # How to deal with work files
 
-You can save periodiacaly work files using -w -wi -ws options. When you save a work file, if it does not contains the kangaroos (-ws) you will lost a bit of work due to the DP overhead, so if you want to continue a file on a same configuration it is recommended to use -ws. To restart a work, use the -i option, the input ascii file is not needed.\
+You can save periodicaly work files using -w -wi -ws options. When you save a work file, if it does not contain the kangaroos (-ws) you will lost a bit of work due to the DP overhead, so if you want to continue a file on a same configuration it is recommended to use -ws. To restart a work, use the -i option, the input ascii file is not needed.\
 When you continue a work file on a different hardware, or using a different number of bits for the distinguished points, or a different number of kangaroos, you will also get an overhead.\
 However, work files are compatible (same key and range) and can be merged, if 2 work files have a different number of distinguished bits, the lowest will be recorded in the destination file.\
-If you have several hosts with different configrations, it is preferable to use -ws on each host and then merge all files from time to time in order to check if the key can be solved. When a merge solve a key, no output file is written. A merged file does not contains kangaroos.
+If you have several hosts with different configurations, it is preferable to use -ws on each host and then merge all files from time to time in order to check if the key can be solved. When a merge solve a key, no output file is written. A merged file does not contain kangaroos.
 
 Start a work from scratch and save work file every 30 seconds:
 ```
@@ -119,7 +120,7 @@ Total f1+f2: count 2^30.04 [02:17]
 
 Note on the wsplit option:
 
-In order to avoid to handle a big hashtable in RAM, it is possible to save it and reset it at each backup. It will save a work file with a prefix at each backup and reset the hashtable in RAM. Then a merge can be done offline and key solved by merge. Even with a small hashtable, the program may also solve the key as paths continue and collision may occur in the small hashtable. Note that to perform the merge you will need the expected RAM available, but this can be done on a dedicated host.
+In order to avoid to handle a big hashtable in RAM, it is possible to save it and reset it at each backup. It will save a work file with a prefix at each backup and reset the hashtable in RAM. Then a merge can be done offline and key solved by merge. Even with a small hashtable, the program may also solve the key as paths continue and collision may occur in the small hashtable so don't forget to use -o option when using server(s). 
 
 Exemple with a 64bit key:
 ```
@@ -163,21 +164,36 @@ Key# 0 [1S]Pub:  0x03BB113592002132E6EF387C3AEBC04667670D4CD40B2103C7D0EE4969E9F
        Priv: 0x5B3F38AF935A3640D158E871CE6E9666DB862636383386EE510F18CCC3BD72EB
 ```
 
-# Distributed clients and central server
+# Distributed clients and central server(s)
 
-It is possible to run Kangaroo in client/server mode. The server has the same options as the standard program except that you have to specify manualy the number of distinguisehd point bits number using -d. All clients which connect will get back the configuration from the server. At the moment, the server is limitted to one single key. If you restart the server with a different configuration (range or key), you need to stop all clients otherwise they will reconnect and send wrong points.
+It is possible to run Kangaroo in client/server mode. The server has the same options as the standard program except that you have to specify manually the number of distinguished point bits number using -d. All clients which connect will get back the configuration from the server. At the moment, the server is limited to one single key. If you restart the server with a different configuration (range or key), you need to stop all clients otherwise they will reconnect and send wrong points.
 
 Starting the server with backup every 5 min, 12 distinguished bits, in64.txt as config file:
 
 ```
-pons@linpons:~/Kangaroo$./kangaroo -w save.work -wi 300 -s -d 12 in64.txt
+pons@linpons:~/Kangaroo$./kangaroo -w save.work -wi 300 -o result.txt -s -d 12 in64.txt
 ```
 **Warning**: The server is very simple and has no authentication mechanism, so if you want to export it on the net, use at your own risk.
 
-Starting client, using gpu and connect to the server linpons:
+Starting client, using gpu and connect to the server linpons, backup kangaroos every 10min:
 ```
-Kangaroo.exe -t 0 -gpu -c linpons
+Kangaroo.exe -t 0 -gpu -w kang.work -wi 600 -c linpons
 ```
+
+![Client server architecture](DOC/architecture.jpg)
+
+**What to do in case of a server crash:**\
+When the server is stopped, clients wait for reconnection, so simply restart it, no need to reload a backup if using wsplit (recommended).\
+**What to do in case of a client crash:**\
+Retart the client using the last kangaroos backup:
+```
+Kangaroo.exe -t 0 -gpu -i kang.work -w kang.work -wi 600 -c linpons
+```
+When the client restart from backup, it will produce duplicate points (counted as dead kangaroos) until it reaches its progress before the crash. It is important to restart the client with its backup, otherwise new kangaroos are created and the DP overhead increases.
+
+To build such an architecture, the total number of kangaroo running in parallel must be know at the starting time to estimate the DP overhead. **It is not recommended to add or remove clients during running time**, the number of kangaroo must be constant.
+
+This program solved puzzle #110 in 2.1 days (109 bit key on the Secp256K1 field) using this architecture on 256 Tesla V100. It required 2<sup>55.55</sup> group operations using DP25 to complete.
 
 # Probability of success
 
@@ -338,7 +354,7 @@ Done: Total time 01:55:48
 
 Next puzzles to solve:
 
-#110, 109bits private key [2<sup>109</sup>,2<sup>110</sup>-1], [12JzYkkN76xkwvcPT6AWKZtGX6w2LAgsJg](https://www.blockchain.com/btc/address/12JzYkkN76xkwvcPT6AWKZtGX6w2LAgsJg) **1.10BTC**
+#110, 109bits private key [2<sup>109</sup>,2<sup>110</sup>-1], [12JzYkkN76xkwvcPT6AWKZtGX6w2LAgsJg](https://www.blockchain.com/btc/address/12JzYkkN76xkwvcPT6AWKZtGX6w2LAgsJg) **1.10BTC** **Solved by this program**
 
 ```
 2000000000000000000000000000

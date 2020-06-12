@@ -212,12 +212,12 @@ void Kangaroo::ProcessServer() {
     t1 = Timer::get_tick();
 
     if(!endOfSearch)
-      printf("\r[Client %d][Kang 2^%.2f][DP Count 2^%.2f/2^%.2f][Dead %d][%s][%s]  ",
+      printf("\r[Client %d][Kang 2^%.2f][DP Count 2^%.2f/2^%.2f][Dead %.0f][%s][%s]  ",
         connectedClient,
         log2((double)totalRW),
         log2((double)hashTable.GetNbItem()),
         log2(expectedNbOp / pow(2.0,dpSize)),
-        collisionInSameHerd,
+        (double)collisionInSameHerd,
         GetTimeStr(t1 - startTime).c_str(),
         hashTable.GetSizeInfo().c_str()
         );
@@ -311,11 +311,11 @@ void Kangaroo::Process(TH_PARAM *params,std::string unit) {
           serverStatus.c_str()
           );
       } else {
-        printf("\33[2K\r\033[1;32m[%.2f %s] \033[1;33m[GPU %.2f %s] \033[1;35m[Count 2^%.2f] \033[1;36m[Dead %d] \033[1;31m[%s (Avg %s)] \033[1;32m[%s]\033[0m",
+        printf("\33[2K\r\033[1;32m[%.2f %s] \033[1;33m[GPU %.2f %s] \033[1;35m[Count 2^%.2f] \033[1;36m[Dead %.0f] \033[1;31m[%s (Avg %s)] \033[1;32m[%s]\033[0m",
           avgKeyRate / 1000000.0,unit.c_str(),
           avgGpuKeyRate / 1000000.0,unit.c_str(),
           log2((double)count + offsetCount),
-          collisionInSameHerd,
+          (double)collisionInSameHerd,
           GetTimeStr(t1 - startTime + offsetTime).c_str(),GetTimeStr(expectedTime).c_str(),
           hashTable.GetSizeInfo().c_str()
         );
@@ -333,7 +333,7 @@ void Kangaroo::Process(TH_PARAM *params,std::string unit) {
 
     // Abort
     if(!clientMode && maxStep>0.0) {
-      double max = expectedNbOp * maxStep; 
+      double max = expectedNbOp * maxStep;
       if( (double)count > max ) {
         ::printf("\nKey#%2d [XX]Pub:  0x%s \n",keyIdx,secp->GetPublicKeyHex(true,keysToSearch[keyIdx]).c_str());
         ::printf("       Aborted !\n");

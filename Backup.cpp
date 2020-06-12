@@ -25,6 +25,7 @@
 #include <algorithm>
 #ifndef WIN64
 #include <pthread.h>
+#include <sys/stat.h>
 #endif
 
 using namespace std;
@@ -52,6 +53,53 @@ uint64_t Kangaroo::FTell(FILE* stream) {
 
 }
 
+bool Kangaroo::IsEmpty(std::string fileName) {
+
+  FILE *pFile = fopen(fileName.c_str(),"r");
+  if(pFile==NULL) {
+    ::printf("OpenPart: Cannot open %s for reading\n",fileName.c_str());
+    ::printf("%s\n",::strerror(errno));
+    ::exit(0);
+  }
+  fseek(pFile,0,SEEK_END);
+  uint32_t size = ftell(pFile);
+  fclose(pFile);
+  return size==0;
+
+}
+
+int Kangaroo::IsDir(string dirName) {
+
+  bool isDir = 0;
+
+#ifdef WIN64
+
+  WIN32_FIND_DATA ffd;
+  HANDLE hFind;
+
+  hFind = FindFirstFile(dirName.c_str(),&ffd);
+  if(hFind == INVALID_HANDLE_VALUE) {
+    ::printf("%s not found\n",dirName.c_str());
+    return -1;
+  }
+  isDir = (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+  FindClose(hFind);
+
+#else
+
+  struct stat buffer;
+  if(stat(dirName.c_str(),&buffer) != 0) {
+    ::printf("%s not found\n",dirName.c_str());
+    return -1;
+  }
+  isDir = (buffer.st_mode & S_IFDIR) != 0;
+
+#endif
+
+  return isDir;
+
+}
+
 FILE *Kangaroo::ReadHeader(std::string fileName, uint32_t *version, int type) {
 
   FILE *f = fopen(fileName.c_str(),"rb");
@@ -60,14 +108,13 @@ FILE *Kangaroo::ReadHeader(std::string fileName, uint32_t *version, int type) {
     ::printf("%s\n",::strerror(errno));
     return NULL;
   }
-
   uint32_t head;
   uint32_t versionF;
 
   // Read header
   if(::fread(&head,sizeof(uint32_t),1,f) != 1) {
     ::printf("ReadHeader: Cannot read from %s\n",fileName.c_str());
-    if(::feof(fRead)) {
+    if(::feof(f)) {
       ::printf("Empty file\n");
     } else {
       ::printf("%s\n",::strerror(errno));
@@ -75,6 +122,9 @@ FILE *Kangaroo::ReadHeader(std::string fileName, uint32_t *version, int type) {
     ::fclose(f);
     return NULL;
   }
+
+  ::fread(&versionF,sizeof(uint32_t),1,f);
+  if(version) *version = versionF;
 
   if(head!=type) {
     if(head==HEADK) {
@@ -88,9 +138,6 @@ FILE *Kangaroo::ReadHeader(std::string fileName, uint32_t *version, int type) {
     ::fclose(f);
     return NULL;
   }
-
-  ::fread(&versionF,sizeof(uint32_t),1,f);
-  if(version) *version = versionF;
 
   return f;
 
@@ -240,14 +287,18 @@ bool Kangaroo::SaveHeader(string fileName,FILE* f,int type,uint64_t totalCount,d
   }
   ::fwrite(&version,sizeof(uint32_t),1,f);
 
-  // Save global param
-  ::fwrite(&dpSize,sizeof(uint32_t),1,f);
-  ::fwrite(&rangeStart.bits64,32,1,f);
-  ::fwrite(&rangeEnd.bits64,32,1,f);
-  ::fwrite(&keysToSearch[keyIdx].x.bits64,32,1,f);
-  ::fwrite(&keysToSearch[keyIdx].y.bits64,32,1,f);
-  ::fwrite(&totalCount,sizeof(uint64_t),1,f);
-  ::fwrite(&totalTime,sizeof(double),1,f);
+  if(type==HEADW) {
+
+    // Save global param
+    ::fwrite(&dpSize,sizeof(uint32_t),1,f);
+    ::fwrite(&rangeStart.bits64,32,1,f);
+    ::fwrite(&rangeEnd.bits64,32,1,f);
+    ::fwrite(&keysToSearch[keyIdx].x.bits64,32,1,f);
+    ::fwrite(&keysToSearch[keyIdx].y.bits64,32,1,f);
+    ::fwrite(&totalCount,sizeof(uint64_t),1,f);
+    ::fwrite(&totalTime,sizeof(double),1,f);
+
+  }
 
   return true;
 }
@@ -397,7 +448,15 @@ void Kangaroo::SaveWork(uint64_t totalCount,double totalTime,TH_PARAM *threads,i
 
 }
 
-void Kangaroo::WorkInfo(std::string &fileName) {
+void Kangaroo::WorkInfo(std::string &fName) {
+
+  int isDir = IsDir(fName);
+  if(isDir<0)
+    return;
+
+  string fileName = fName;
+  if(isDir)
+    fileName = fName + "/header";
 
   ::printf("Loading: %s\n",fileName.c_str());
 
@@ -405,6 +464,11 @@ void Kangaroo::WorkInfo(std::string &fileName) {
   FILE *f1 = ReadHeader(fileName,&version,HEADW);
   if(f1 == NULL)
     return;
+
+#ifndef WIN64
+  int fd = fileno(f1);
+  posix_fadvise(fd,0,0,POSIX_FADV_RANDOM|POSIX_FADV_NOREUSE);
+#endif
 
   uint32_t dp1;
   Point k1;
@@ -430,7 +494,15 @@ void Kangaroo::WorkInfo(std::string &fileName) {
   }
 
   // Read hashTable
-  hashTable.SeekNbItem(f1);
+  if(isDir) {
+    for(int i = 0; i < MERGE_PART; i++) {
+      FILE* f = OpenPart(fName,"rb",i);
+      hashTable.SeekNbItem(f,i * H_PER_PART,(i + 1) * H_PER_PART);
+      fclose(f);
+    }
+  } else {
+    hashTable.SeekNbItem(f1);
+  }
 
   ::printf("Version   : %d\n",version);
   ::printf("DP bits   : %d\n",dp1);
@@ -462,7 +534,7 @@ void Kangaroo::WorkExport(std::string &fileName) {
   ::printf("Loading: %s\n",fileName.c_str());
 
   uint32_t version;
-  FILE *f1 = ReadHeader(fileName,&version);
+  FILE *f1 = ReadHeader(fileName,&version,HEADW);
   if(f1 == NULL)
     return;
 

@@ -82,9 +82,10 @@ typedef struct {
   SOCKET clientSock;
   char  *clientInfo;
 
-  HashTable *h2;
   uint32_t hStart;
   uint32_t hStop;
+  char *part1Name;
+  char *part2Name;
 
 } TH_PARAM;
 
@@ -105,9 +106,12 @@ typedef struct {
   DP *dp;
 } DP_CACHE;
 
-// Wrok file type
+// Work file type
 #define HEADW 0xFA6A8001  // Full work file
 #define HEADK 0xFA6A8002  // Kangaroo only file
+
+// Number of Hash entry per partition
+#define H_PER_PART (HASH_SIZE / MERGE_PART)
 
 class Kangaroo {
 
@@ -121,16 +125,25 @@ public:
   bool ParseConfigFile(std::string &fileName);
   bool LoadWork(std::string &fileName);
   void Check(std::vector<int> gpuId,std::vector<int> gridSize);
-  bool MergeWork(std::string &file1,std::string &file2,std::string &dest);
-  void MergeDir(std::string &dirname,std::string &dest);
-  void WorkInfo(std::string &fileName);
+  void MergeDir2(std::string &dirname,std::string &dest);
   void WorkExport(std::string &fileName);
+  void MergeDir(std::string& dirname,std::string& dest);
+  bool MergeWork(std::string &file1,std::string &file2,std::string &dest,bool printStat=true);
+  void WorkInfo(std::string &fileName);
+  bool MergeWorkPart(std::string& file1,std::string& file2,bool printStat);
+  bool MergeWorkPartPart(std::string& part1Name,std::string& part2Name);
+  static void CreateEmptyPartWork(std::string& partName);
+  void CheckWorkFile(int nbCore,std::string& fileName);
+  void CheckPartition(int nbCore,std::string& partName);
+  bool FillEmptyPartFromFile(std::string& partName,std::string& fileName,bool printStat);
 
   // Threaded procedures
   void SolveKeyCPU(TH_PARAM *p);
   void SolveKeyGPU(TH_PARAM *p);
   bool HandleRequest(TH_PARAM *p);
-  bool MergeTable(TH_PARAM* p);
+  bool MergePartition(TH_PARAM* p);
+  bool CheckPartition(TH_PARAM* p);
+  bool CheckWorkFile(TH_PARAM* p);
   void ProcessServer();
 
   void AddConnectedClient();
@@ -147,7 +160,7 @@ private:
   bool AddToTable(Int *pos,Int *dist,uint32_t kType);
   bool SendToServer(std::vector<ITEM> &dp);
   bool CheckKey(Int d1,Int d2,uint8_t type);
-  bool CollisionCheck(Int *dist,uint32_t kType);
+  bool CollisionCheck(Int* d1,uint32_t type1,Int* d2,uint32_t type2);
   bool savePrivkey(Int *pk);
   void ComputeExpected(double dp,double *op,double *ram,double* overHead = NULL);
   void InitRange();
@@ -165,6 +178,12 @@ private:
   bool  SaveHeader(std::string fileName,FILE* f,int type,uint64_t totalCount,double totalTime);
   int FSeek(FILE *stream,uint64_t pos);
   uint64_t FTell(FILE *stream);
+  int IsDir(std::string dirName);
+  bool IsEmpty(std::string fileName);
+  static std::string GetPartName(std::string& partName,int i,bool tmpPart);
+  static FILE* OpenPart(std::string& partName,char* mode,int i,bool tmpPart=false);
+  uint32_t CheckHash(uint32_t h,uint32_t nbItem,HashTable* hT,FILE* f);
+
 
   // Network stuff
   void AcceptConnections(SOCKET server_soc);
@@ -216,7 +235,7 @@ private:
   uint64_t dMask;
   uint32_t dpSize;
   int32_t initDPSize;
-  int collisionInSameHerd;
+  uint64_t collisionInSameHerd;
   std::vector<Point> keysToSearch;
   Point keyToSearch;
   Point keyToSearchNeg;
