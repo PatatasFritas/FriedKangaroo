@@ -135,6 +135,14 @@ public:
 
 private:
 
+  // HashEntry Merge stuff
+  int hashentry_Add(HASH_ENTRY *he, uint64_t h,ENTRY* e);
+  bool hashentry_CollisionCheck(Int *distTame , Int *distWild);
+  void hashentry_Save(FILE* f,HASH_ENTRY *he);
+  void hashentry_Reset(HASH_ENTRY *he);
+  int hashentry_compare(int128_t *i1,int128_t *i2);
+  void hashentry_ReAllocate(HASH_ENTRY *he,uint64_t h,uint32_t add);
+
   bool IsDP(uint64_t x);
   void SetDP(int size);
   void CreateHerd(int nbKangaroo,Int *px, Int *py, Int *d, int firstType,bool lock=true);

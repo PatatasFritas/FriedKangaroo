@@ -31,6 +31,169 @@
 
 using namespace std;
 
+#define HASHENTRY_ADD_ENTRY(entry) {                 \
+  /* Shift the end of the index table */   \
+  for (int i = he->nbItem; i > st; i--)   \
+    he->items[i] = he->items[i - 1];     \
+  he->items[st] = entry;                  \
+  he->nbItem++;}
+
+#define HASHENTRY_GET(id) he->items[id]
+
+void Kangaroo::hashentry_ReAllocate(HASH_ENTRY *he,uint64_t h,uint32_t add) {
+
+  he->maxItem += add;
+  ENTRY** nitems = (ENTRY**)malloc(sizeof(ENTRY*) * he->maxItem);
+  memcpy(nitems,he->items,sizeof(ENTRY*) * he->nbItem);
+  free(he->items);
+  he->items = nitems;
+
+}
+
+int Kangaroo::hashentry_compare(int128_t *i1,int128_t *i2) {
+
+  uint64_t *a = i1->i64;
+  uint64_t *b = i2->i64;
+
+  if(a[1] == b[1]) {
+    if(a[0] == b[0]) {
+      return 0;
+    } else {
+      return (a[0] > b[0]) ? 1 : -1;
+    }
+  } else {
+    return (a[1] > b[1]) ? 1 : -1;
+  }
+
+}
+
+bool Kangaroo::hashentry_CollisionCheck(Int *distTame , Int *distWild) {
+
+  Int Td;
+  Int Wd;
+
+  Td.Set(distTame);
+  Wd.Set(distWild);
+
+  endOfSearch = CheckKey(Td,Wd,0) || CheckKey(Td,Wd,1) || CheckKey(Td,Wd,2) || CheckKey(Td,Wd,3);
+
+  if(!endOfSearch) {
+    // Should not happen, reset the kangaroo
+    ::printf("\n Unexpected wrong collision, reset kangaroo !\n");
+    if((int64_t)(Td.bits64[3])<0) {
+      Td.ModNegK1order();
+      ::printf("Found: Td-%s\n",Td.GetBase16().c_str());
+    } else {
+      ::printf("Found: Td %s\n",Td.GetBase16().c_str());
+    }
+    if((int64_t)(Wd.bits64[3])<0) {
+      Wd.ModNegK1order();
+      ::printf("Found: Wd-%s\n",Wd.GetBase16().c_str());
+    } else {
+      ::printf("Found: Wd %s\n",Wd.GetBase16().c_str());
+    }
+    return false;
+  }
+
+  return true;
+
+}
+
+int Kangaroo::hashentry_Add(HASH_ENTRY *he, uint64_t h,ENTRY* e) {
+
+  if(he->maxItem == 0) {
+    he->maxItem = 16;
+    he->items = (ENTRY **)malloc(sizeof(ENTRY *) * he->maxItem);
+  }
+
+  if(he->nbItem == 0) {
+    he->items[0] = e;
+    he->nbItem = 1;
+    return ADD_OK;
+  }
+
+  if(he->nbItem >= he->maxItem - 1) {
+    // We need to reallocate
+    hashentry_ReAllocate(he,h,4);
+  }
+
+  // Search insertion position
+  int st,ed,mi;
+  st = 0; ed = he->nbItem - 1;
+  while(st <= ed) {
+    mi = (st + ed) / 2;
+    int comp = hashentry_compare(&e->x,&HASHENTRY_GET(mi)->x);
+    if(comp<0) {
+      ed = mi - 1;
+    } else if (comp==0) {
+
+      if((e->d.i64[0] == HASHENTRY_GET(mi)->d.i64[0]) && (e->d.i64[1] == HASHENTRY_GET(mi)->d.i64[1])) {
+        // Same point added 2 times or collision in same herd !
+        return ADD_DUPLICATE;
+      }
+
+      int128_t d = HASHENTRY_GET(mi)->d;
+      uint32_t kType = (d.i64[1] & 0x4000000000000000ULL) != 0;
+      int sign = (d.i64[1] & 0x8000000000000000ULL) != 0;
+      d.i64[1] &= 0x3FFFFFFFFFFFFFFFULL;
+
+      Int kDist;
+      kDist.SetInt32(0);
+      kDist.bits64[0] = d.i64[0];
+      kDist.bits64[1] = d.i64[1];
+      if(sign) kDist.ModNegK1order();
+
+      Int dist;
+      dist.SetInt32(0);
+      uint32_t kType2 = (e->d.i64[1] & 0x4000000000000000ULL) != 0;
+      int sign2 = (e->d.i64[1] & 0x8000000000000000ULL) != 0;
+      dist.bits64[0] = e->d.i64[0];
+      dist.bits64[1] = e->d.i64[1];
+      dist.bits64[1] &= 0x3FFFFFFFFFFFFFFFULL;
+      if(sign2) dist.ModNegK1order();
+      if(kType2==TAME)
+        hashentry_CollisionCheck(&dist,&kDist);
+      else
+        hashentry_CollisionCheck(&kDist,&dist);
+
+      return ADD_COLLISION;
+
+    } else {
+      st = mi + 1;
+    }
+  }
+
+  HASHENTRY_ADD_ENTRY(e);
+  return ADD_OK;
+
+}
+
+
+void Kangaroo::hashentry_Save(FILE* f,HASH_ENTRY *he) {
+
+  fwrite(&he->nbItem,sizeof(uint32_t),1,f);
+  fwrite(&he->maxItem,sizeof(uint32_t),1,f);
+  for(uint32_t i = 0; i < he->nbItem; i++) {
+    fwrite(&(he->items[i]->x),16,1,f);
+    fwrite(&(he->items[i]->d),16,1,f);
+  }
+
+}
+
+
+void Kangaroo::hashentry_Reset(HASH_ENTRY *he) {
+
+  if(he->items) {
+    for(uint32_t i = 0; i<he->nbItem; i++)
+      free(he->items[i]);
+  }
+  safe_free(he->items);
+  he->maxItem = 0;
+  he->nbItem = 0;
+
+}
+
+
 bool Kangaroo::MergeTable(TH_PARAM* p) {
 
   for(uint64_t h = p->hStart; h < p->hStop && !endOfSearch; h++) {
@@ -242,50 +405,65 @@ void Kangaroo::MergeWork(std::string& file1,std::string& file2,std::string& dest
     return;
   }
 
-
   uint32_t nbItem;
   uint32_t maxItem;
-
-  // Load hashtable
-  hashTable.LoadTable(f1,0,HASH_SIZE);
+  HASH_ENTRY he;
 
   for(uint32_t h = 0; h < HASH_SIZE && !endOfSearch; h++) {
 
+    fread(&nbItem,sizeof(uint32_t),1,f1);
+    fread(&maxItem,sizeof(uint32_t),1,f1);
+    for(uint32_t i = 0; i < nbItem; i++) {
+      ENTRY* e = (ENTRY*)malloc(sizeof(ENTRY));
+      fread(&(e->x),16,1,f1);
+      fread(&(e->d),16,1,f1);
+
+      int addStatus = hashentry_Add(&he,h,e);
+
+      switch(addStatus) {
+
+        case ADD_OK:
+          break;
+
+        case ADD_DUPLICATE:
+          free(e);
+          collisionInSameHerd++;
+          break;
+
+        case ADD_COLLISION:
+          break;
+      }
+
+    }
+
     fread(&nbItem,sizeof(uint32_t),1,f2);
     fread(&maxItem,sizeof(uint32_t),1,f2);
-
     for(uint32_t i = 0; i < nbItem; i++) {
       ENTRY* e = (ENTRY*)malloc(sizeof(ENTRY));
       fread(&(e->x),16,1,f2);
       fread(&(e->d),16,1,f2);
 
-      int addStatus = hashTable.Add(h,e);
+      int addStatus = hashentry_Add(&he,h,e);
+
       switch(addStatus) {
 
-      case ADD_OK:
-        break;
+        case ADD_OK:
+          break;
 
-      case ADD_DUPLICATE:
-        free(e);
-        collisionInSameHerd++;
-        break;
+        case ADD_DUPLICATE:
+          free(e);
+          collisionInSameHerd++;
+          break;
 
-      case ADD_COLLISION:
-        Int dist;
-        dist.SetInt32(0);
-        uint32_t kType = (e->d.i64[1] & 0x4000000000000000ULL) != 0;
-        int sign = (e->d.i64[1] & 0x8000000000000000ULL) != 0;
-        dist.bits64[0] = e->d.i64[0];
-        dist.bits64[1] = e->d.i64[1];
-        dist.bits64[1] &= 0x3FFFFFFFFFFFFFFFULL;
-        if(sign) dist.ModNegK1order();
-        CollisionCheck(&dist,kType);
-        break;
+        case ADD_COLLISION:
+          break;
       }
+
     }
+
+    hashentry_Save(f,&he);
+    hashentry_Reset(&he);
   }
-  hashTable.SaveTable(f,0,HASH_SIZE,false);
-  hashTable.Reset();
 
   fclose(f1);
   fclose(f2);
